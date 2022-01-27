@@ -9,7 +9,7 @@ UnityのUniversal Render PipelineでもVroidモデルのシェーダー がき�
 * [UniVrm](https://github.com/vrm-c/UniVRM)
 * [Shader Graphs MToon for URP VR](https://github.com/simplestargame/ShaderGraphsMToonForURPVR)
 
-UniVrmのバージョンはv0.82.1です。
+UniVrmのバージョンはv0.94.0です。
 
 unipackageファイルをあなたのUnityプロジェクトにドラッグ&ドロップして使ってください。
 

@@ -9,7 +9,7 @@ It is a mix of the following two packages
 * [UniVrm](https://github.com/vrm-c/UniVRM)
 * [Shader Graphs MToon for URP VR](https://github.com/simplestargame/ShaderGraphsMToonForURPVR)
 
-The UniVrm version of this package is v0.82.1.
+The UniVrm version of this package is v0.94.0.
 
 Drag and drop the unipackage file into your Unity project to use it.
 

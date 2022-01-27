@@ -64,6 +64,14 @@ namespace UniGLTF
         /// </summary>
         public IReadOnlyList<SkinnedMeshRenderer> SkinnedMeshRenderers => _skinnedMeshRenderers;
 
+        /// <summary>
+        /// ShowMeshes の対象になる Renderer。
+        /// Destroy対象とは無関係なので、自由に操作して OK。
+        /// </summary>
+        /// <typeparam name="Renderer"></typeparam>
+        /// <returns></returns>
+        public IList<Renderer> VisibleRenderers => _visibleRenderers;
+
         private readonly List<Transform> _nodes = new List<Transform>();
         private readonly List<(SubAssetKey, UnityEngine.Object)> _resources = new List<(SubAssetKey, UnityEngine.Object)>();
         private readonly List<Material> _materials = new List<Material>();
@@ -73,6 +81,8 @@ namespace UniGLTF
         private readonly List<Renderer> _renderers = new List<Renderer>();
         private readonly List<MeshRenderer> _meshRenderers = new List<MeshRenderer>();
         private readonly List<SkinnedMeshRenderer> _skinnedMeshRenderers = new List<SkinnedMeshRenderer>();
+
+        private readonly List<Renderer> _visibleRenderers = new List<Renderer>();
 
         public static RuntimeGltfInstance AttachTo(GameObject go, ImporterContext context)
         {
@@ -110,25 +120,32 @@ namespace UniGLTF
 
             foreach (var renderer in go.GetComponentsInChildren<Renderer>())
             {
-                loaded._renderers.Add(renderer);
-
-                switch (renderer)
-                {
-                    case MeshRenderer meshRenderer:
-                        loaded._meshRenderers.Add(meshRenderer);
-                        break;
-                    case SkinnedMeshRenderer skinnedMeshRenderer:
-                        loaded._skinnedMeshRenderers.Add(skinnedMeshRenderer);
-                        break;
-                }
+                loaded.AddRenderer(renderer);
             }
 
             return loaded;
         }
 
+        public void AddRenderer(Renderer renderer)
+        {
+            _renderers.Add(renderer);
+
+            VisibleRenderers.Add(renderer);
+
+            switch (renderer)
+            {
+                case MeshRenderer meshRenderer:
+                    _meshRenderers.Add(meshRenderer);
+                    break;
+                case SkinnedMeshRenderer skinnedMeshRenderer:
+                    _skinnedMeshRenderers.Add(skinnedMeshRenderer);
+                    break;
+            }
+        }
+
         public void ShowMeshes()
         {
-            foreach (var r in Renderers)
+            foreach (var r in VisibleRenderers)
             {
                 r.enabled = true;
             }

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Threading.Tasks;
+using UnityEngine.Profiling;
 using VRMShaders;
 
 namespace UniGLTF
@@ -56,7 +57,6 @@ namespace UniGLTF
         public GltfData Data { get; }
         public String Json => Data.Json;
         public glTF GLTF => Data.GLTF;
-        public IStorage Storage => Data.Storage;
         #endregion
 
         // configuration
@@ -79,7 +79,7 @@ namespace UniGLTF
         {
             if (awaitCaller == null)
             {
-                awaitCaller = new TaskCaller();
+                awaitCaller = new ImmediateCaller();
             }
 
             if (MeasureTime == null)
@@ -105,12 +105,12 @@ namespace UniGLTF
 
             using (MeasureTime("LoadTextures"))
             {
-                await LoadTexturesAsync();
+                await LoadTexturesAsync(awaitCaller);
             }
 
             using (MeasureTime("LoadMaterials"))
             {
-                await LoadMaterialsAsync();
+                await LoadMaterialsAsync(awaitCaller);
             }
 
             await LoadGeometryAsync(awaitCaller, MeasureTime);
@@ -132,9 +132,10 @@ namespace UniGLTF
             {
                 foreach (var (key, gltfAnimation) in Enumerable.Zip(AnimationImporterUtil.EnumerateSubAssetKeys(GLTF), GLTF.animations, (x, y) => (x, y)))
                 {
-                    await AnimationClipFactory.LoadAnimationClipAsync(key, async () =>
+                    await AnimationClipFactory.LoadAnimationClipAsync(key, () =>
                     {
-                        return AnimationImporterUtil.ConvertAnimationClip(GLTF, gltfAnimation, InvertAxis.Create());
+                        var clip = AnimationImporterUtil.ConvertAnimationClip(Data, gltfAnimation, InvertAxis.Create());
+                        return Task.FromResult(clip);
                     });
                 }
 
@@ -169,40 +170,65 @@ namespace UniGLTF
             var inverter = InvertAxis.Create();
 
             var meshImporter = new MeshImporter();
-            for (int i = 0; i < GLTF.meshes.Count; ++i)
+            if (GLTF.meshes.Count > 0)
             {
-                var index = i;
-                using (MeasureTime("ReadMesh"))
+                for (var i = 0; i < GLTF.meshes.Count; ++i)
                 {
-                    var x = meshImporter.ReadMesh(GLTF, index, inverter);
-                    var y = await BuildMeshAsync(awaitCaller, MeasureTime, x, index);
-                    Meshes.Add(y);
+                    var index = i;
+                    using (MeasureTime("ReadMesh"))
+                    {
+                        var meshContext = await awaitCaller.Run(() => meshImporter.ReadMesh(Data, index, inverter));
+                        var meshWithMaterials = await BuildMeshAsync(awaitCaller, MeasureTime, meshContext, index);
+                        Meshes.Add(meshWithMaterials);
+                    }
                 }
+
+                await awaitCaller.NextFrame();
             }
 
-            using (MeasureTime("LoadNodes"))
+            if (GLTF.nodes.Count > 0)
             {
-                for (int i = 0; i < GLTF.nodes.Count; i++)
+                using (MeasureTime("LoadNodes"))
                 {
-                    Nodes.Add(NodeImporter.ImportNode(GLTF.nodes[i], i).transform);
+                    Profiler.BeginSample("ImporterContext.LoadNodes");
+                    for (var i = 0; i < GLTF.nodes.Count; i++)
+                    {
+                        Nodes.Add(NodeImporter.ImportNode(GLTF.nodes[i], i).transform);
+                    }
+                    Profiler.EndSample();
                 }
+
+                await awaitCaller.NextFrame();
             }
-            await awaitCaller.NextFrame();
 
             using (MeasureTime("BuildHierarchy"))
             {
                 var nodes = new List<NodeImporter.TransformWithSkin>();
-                for (int i = 0; i < Nodes.Count; ++i)
+                if (Nodes.Count > 0)
                 {
-                    nodes.Add(NodeImporter.BuildHierarchy(GLTF, i, Nodes, Meshes));
+                    Profiler.BeginSample("NodeImporter.BuildHierarchy");
+                    for (var i = 0; i < Nodes.Count; ++i)
+                    {
+                        nodes.Add(NodeImporter.BuildHierarchy(GLTF, i, Nodes, Meshes));
+                    }
+                    Profiler.EndSample();
+
+                    await awaitCaller.NextFrame();
                 }
 
                 NodeImporter.FixCoordinate(GLTF, nodes, inverter);
 
                 // skinning
-                for (int i = 0; i < nodes.Count; ++i)
+                if (nodes.Count > 0)
                 {
-                    NodeImporter.SetupSkinning(GLTF, nodes, i, inverter);
+                    Profiler.BeginSample("NodeImporter.SetupSkinning");
+                    for (var i = 0; i < nodes.Count; ++i)
+                    {
+                        NodeImporter.SetupSkinning(Data, nodes, i, inverter);
+                    }
+                    Profiler.EndSample();
+
+                    await awaitCaller.NextFrame();
                 }
 
                 if (Root == null)
@@ -240,7 +266,8 @@ namespace UniGLTF
             if (Data.GLTF.materials == null || Data.GLTF.materials.Count == 0)
             {
                 // no material. work around.
-                var param = MaterialDescriptorGenerator.Get(Data, 0);
+                // TODO: https://www.khronos.org/registry/glTF/specs/2.0/glTF-2.0.html#default-material
+                var param = MaterialDescriptor.Default;
                 var material = await MaterialFactory.LoadAsync(param, TextureFactory.GetTextureAsync, awaitCaller);
             }
             else
@@ -259,7 +286,7 @@ namespace UniGLTF
             return Task.FromResult<object>(null);
         }
 
-        async Task<MeshWithMaterials> BuildMeshAsync(IAwaitCaller awaitCaller, Func<string, IDisposable> MeasureTime, MeshImporter.MeshContext x, int i)
+        async Task<MeshWithMaterials> BuildMeshAsync(IAwaitCaller awaitCaller, Func<string, IDisposable> MeasureTime, MeshContext x, int i)
         {
             using (MeasureTime("BuildMesh"))
             {

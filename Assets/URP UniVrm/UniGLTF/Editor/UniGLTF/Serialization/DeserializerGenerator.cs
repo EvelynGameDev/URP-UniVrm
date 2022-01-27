@@ -35,12 +35,11 @@ public static class GltfDeserializer
             get
             {
                 return Path.Combine(UnityEngine.Application.dataPath,
-                "UniGLTF/UniGLTF/Scripts/IO/GltfDeserializer.g.cs");
+                "UniGLTF/Runtime/UniGLTF/Format/GltfDeserializer.g.cs");
             }
         }
 
-        [MenuItem(UniGLTFVersion.MENU + "/GLTF: Generate Deserializer")]
-        static void GenerateSerializer()
+        public static void GenerateSerializer()
         {
             var info = new ObjectSerialization(typeof(glTF), "gltf", "Deserialize_");
             Debug.Log(info);
