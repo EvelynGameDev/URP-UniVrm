@@ -57,13 +57,13 @@ namespace UniGLTF
 
         static Byte[] Export(GameObject root)
         {
-            var gltf = new glTF();
-            using (var exporter = new gltfExporter(gltf, new GltfExportSettings()))
+            var data = new ExportingGltfData();
+            using (var exporter = new gltfExporter(data, new GltfExportSettings()))
             {
                 exporter.Prepare(root);
-                exporter.Export(new GltfExportSettings(), new EditorTextureSerializer());
-                return gltf.ToGlbBytes();
+                exporter.Export(new EditorTextureSerializer());
             }
+            return data.ToGlbBytes();
         }
 
         // Unsolved Animation Export issue
@@ -81,7 +81,7 @@ namespace UniGLTF
             GltfData data = null;
             try
             {
-                data = new AmbiguousGltfFileParser(gltf.FullName).Parse();
+                data = new AutoGltfFileParser(gltf.FullName).Parse();
             }
             catch (Exception ex)
             {
@@ -127,7 +127,7 @@ namespace UniGLTF
             GltfData data = null;
             try
             {
-                data = new AmbiguousGltfFileParser(gltf.FullName).Parse();
+                data = new AutoGltfFileParser(gltf.FullName).Parse();
             }
             catch (Exception ex)
             {
@@ -142,6 +142,17 @@ namespace UniGLTF
             var distinct = gltfTextures.Distinct().ToArray();
             Assert.True(gltfTextures.Length == distinct.Length);
             Assert.True(gltfTextures.SequenceEqual(distinct));
+        }
+
+        static bool Exclude(FileInfo f)
+        {
+            // RecursiveSkeletons/glTF-Binary/RecursiveSkeletons.glb
+            if (f.Directory.Parent.Name == "RecursiveSkeletons")
+            {
+                return true;
+            }
+
+            return false;
         }
 
         [Test]
@@ -160,6 +171,10 @@ namespace UniGLTF
 
             foreach (var gltf in EnumerateGltfFiles(root))
             {
+                if (Exclude(gltf))
+                {
+                    continue;
+                }
                 RuntimeLoadExport(gltf, root.FullName.Length);
 
                 EditorLoad(gltf, root.FullName.Length);
@@ -205,7 +220,7 @@ namespace UniGLTF
 
             {
                 var path = Path.Combine(root.FullName, "DamagedHelmet/glTF-Binary/DamagedHelmet.glb");
-                var data = new AmbiguousGltfFileParser(path).Parse();
+                var data = new AutoGltfFileParser(path).Parse();
 
                 var matDesc = new GltfMaterialDescriptorGenerator().Get(data, 0);
                 Assert.AreEqual("Standard", matDesc.ShaderName);

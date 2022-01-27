@@ -10,7 +10,9 @@ namespace UniGLTF
 {
     public class gltfExporter : IDisposable
     {
-        protected glTF glTF;
+        protected ExportingGltfData _data;
+
+        protected glTF _gltf => _data.GLTF;
 
         public GameObject Copy
         {
@@ -44,8 +46,6 @@ namespace UniGLTF
             private set;
         }
 
-        public ITextureExporter TextureExporter => m_textureExporter;
-
         protected virtual IMaterialExporter CreateMaterialExporter()
         {
             return new MaterialExporter();
@@ -63,17 +63,29 @@ namespace UniGLTF
             }
         }
 
-        TextureExporter m_textureExporter;
+        protected ITextureExporter TextureExporter => _textureExporter;
+        private TextureExporter _textureExporter;
 
         GltfExportSettings m_settings;
 
-        public gltfExporter(glTF gltf, GltfExportSettings settings)
+        IProgress<ExportProgress> m_progress;
+
+        void ReportProgress(string msg, float progress)
         {
-            glTF = gltf;
+            if (m_progress == null)
+            {
+                return;
+            }
+            m_progress.Report(new ExportProgress("gltfExporter", msg, progress));
+        }
 
-            glTF.extensionsUsed.AddRange(ExtensionUsed);
+        public gltfExporter(ExportingGltfData data, GltfExportSettings settings, IProgress<ExportProgress> progress = null)
+        {
+            _data = data;
 
-            glTF.asset = new glTFAssets
+            _gltf.extensionsUsed.AddRange(ExtensionUsed);
+
+            _gltf.asset = new glTFAssets
             {
                 generator = "UniGLTF-" + UniGLTFVersion.VERSION,
                 version = "2.0",
@@ -112,6 +124,8 @@ namespace UniGLTF
                 // should throw ?
                 Debug.LogError("root mesh is not exported");
             }
+
+            ReportProgress("prepared", 0.1f);
         }
 
         public void Dispose()
@@ -222,28 +236,27 @@ namespace UniGLTF
             // do nothing
         }
 
-        public virtual void Export(GltfExportSettings meshExportSettings, ITextureSerializer textureSerializer)
+        public virtual void Export(ITextureSerializer textureSerializer)
         {
-            var bytesBuffer = new ArrayByteBuffer(new byte[50 * 1024 * 1024]);
-            var bufferIndex = glTF.AddBuffer(bytesBuffer);
-
             Nodes = Copy.transform.Traverse()
                 .Skip(1) // exclude root object for the symmetry with the importer
                 .ToList();
 
             var uniqueUnityMeshes = new MeshExportList();
-            uniqueUnityMeshes.GetInfo(Nodes, meshExportSettings);
+            uniqueUnityMeshes.GetInfo(Nodes, m_settings);
 
             #region Materials and Textures
+            ReportProgress("Materials and Textures", 0.2f);
             Materials = uniqueUnityMeshes.GetUniqueMaterials().ToList();
 
-            m_textureExporter = new TextureExporter(textureSerializer);
+            _textureExporter = new TextureExporter(textureSerializer);
 
             var materialExporter = CreateMaterialExporter();
-            glTF.materials = Materials.Select(x => materialExporter.ExportMaterial(x, TextureExporter, m_settings)).ToList();
+            _gltf.materials = Materials.Select(x => materialExporter.ExportMaterial(x, TextureExporter, m_settings)).ToList();
             #endregion
 
             #region Meshes
+            ReportProgress("Meshes", 0.4f);
             MeshBlendShapeIndexMap = new Dictionary<Mesh, Dictionary<int, int>>();
             foreach (var unityMesh in uniqueUnityMeshes)
             {
@@ -252,11 +265,11 @@ namespace UniGLTF
                     continue;
                 }
 
-                var (gltfMesh, blendShapeIndexMap) = meshExportSettings.DivideVertexBuffer
-                    ? MeshExporter_DividedVertexBuffer.Export(glTF, bufferIndex, unityMesh, Materials, m_settings.InverseAxis.Create(), meshExportSettings)
-                    : MeshExporter_SharedVertexBuffer.Export(glTF, bufferIndex, unityMesh, Materials, m_settings.InverseAxis.Create(), meshExportSettings)
+                var (gltfMesh, blendShapeIndexMap) = m_settings.DivideVertexBuffer
+                    ? MeshExporter_DividedVertexBuffer.Export(_data, unityMesh, Materials, m_settings.InverseAxis.Create(), m_settings)
+                    : MeshExporter_SharedVertexBuffer.Export(_data, unityMesh, Materials, m_settings.InverseAxis.Create(), m_settings)
                     ;
-                glTF.meshes.Add(gltfMesh);
+                _gltf.meshes.Add(gltfMesh);
                 Meshes.Add(unityMesh.Mesh);
                 if (!MeshBlendShapeIndexMap.ContainsKey(unityMesh.Mesh))
                 {
@@ -267,6 +280,7 @@ namespace UniGLTF
             #endregion
 
             #region Nodes and Skins
+            ReportProgress("Nodes and Skins", 0.8f);
             var skins = uniqueUnityMeshes
                 .SelectMany(x => x.Renderers)
                 .Where(x => x.Item1 is SkinnedMeshRenderer && x.UniqueBones != null)
@@ -276,9 +290,9 @@ namespace UniGLTF
             foreach (var node in Nodes)
             {
                 var gltfNode = ExportNode(node, Nodes, uniqueUnityMeshes, skins);
-                glTF.nodes.Add(gltfNode);
+                _gltf.nodes.Add(gltfNode);
             }
-            glTF.scenes = new List<gltfScene>
+            _gltf.scenes = new List<gltfScene>
                 {
                     new gltfScene
                     {
@@ -293,20 +307,20 @@ namespace UniGLTF
                     if (uniqueBones != null && renderer is SkinnedMeshRenderer smr)
                     {
                         var matrices = x.GetBindPoses().Select(m_settings.InverseAxis.Create().InvertMat4).ToArray();
-                        var accessor = glTF.ExtendBufferAndGetAccessorIndex(bufferIndex, matrices, glBufferTarget.NONE);
+                        var accessor = _data.ExtendBufferAndGetAccessorIndex(matrices, glBufferTarget.NONE);
                         var skin = new glTFSkin
                         {
                             inverseBindMatrices = accessor,
                             joints = uniqueBones.Select(y => Nodes.IndexOf(y)).ToArray(),
                             skeleton = Nodes.IndexOf(smr.rootBone),
                         };
-                        var skinIndex = glTF.skins.Count;
-                        glTF.skins.Add(skin);
+                        var skinIndex = _gltf.skins.Count;
+                        _gltf.skins.Add(skin);
 
                         foreach (var z in Nodes.Where(y => y.Has(renderer)))
                         {
                             var nodeIndex = Nodes.IndexOf(z);
-                            var node = glTF.nodes[nodeIndex];
+                            var node = _gltf.nodes[nodeIndex];
                             node.skin = skinIndex;
                         }
                     }
@@ -316,6 +330,7 @@ namespace UniGLTF
 
 #if UNITY_EDITOR
             #region Animations
+            ReportProgress("Animations", 0.9f);
 
             var clips = new List<AnimationClip>();
             var animator = Copy.GetComponent<Animator>();
@@ -339,14 +354,14 @@ namespace UniGLTF
                     {
                         var sampler = animationWithCurve.Animation.samplers[kv.Key];
 
-                        var inputAccessorIndex = glTF.ExtendBufferAndGetAccessorIndex(bufferIndex, kv.Value.Input);
+                        var inputAccessorIndex = _data.ExtendBufferAndGetAccessorIndex(kv.Value.Input);
                         sampler.input = inputAccessorIndex;
 
-                        var outputAccessorIndex = glTF.ExtendBufferAndGetAccessorIndex(bufferIndex, kv.Value.Output);
+                        var outputAccessorIndex = _data.ExtendBufferAndGetAccessorIndex(kv.Value.Output);
                         sampler.output = outputAccessorIndex;
 
                         // modify accessors
-                        var outputAccessor = glTF.accessors[outputAccessorIndex];
+                        var outputAccessor = _gltf.accessors[outputAccessorIndex];
                         var channel = animationWithCurve.Animation.channels.First(x => x.sampler == kv.Key);
                         switch (glTFAnimationTarget.GetElementCount(channel.target.path))
                         {
@@ -369,8 +384,9 @@ namespace UniGLTF
                         }
                     }
                     animationWithCurve.Animation.name = clip.name;
-                    glTF.animations.Add(animationWithCurve.Animation);
+                    _gltf.animations.Add(animationWithCurve.Animation);
                 }
+
             }
             #endregion
 #endif
@@ -378,14 +394,14 @@ namespace UniGLTF
             ExportExtensions(textureSerializer);
 
             // Extension で Texture が増える場合があるので最後に呼ぶ
-            var exported = m_textureExporter.Export();
+            var exported = _textureExporter.Export();
             for (var exportedTextureIdx = 0; exportedTextureIdx < exported.Count; ++exportedTextureIdx)
             {
                 var (unityTexture, colorSpace) = exported[exportedTextureIdx];
-                glTF.PushGltfTexture(bufferIndex, unityTexture, colorSpace, textureSerializer);
+                GltfTextureExporter.PushGltfTexture(_data, unityTexture, colorSpace, textureSerializer);
             }
 
-            FixName(glTF);
+            FixName(_gltf);
         }
 
         /// <summary>

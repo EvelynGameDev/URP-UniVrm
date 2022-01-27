@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace UniGLTF
@@ -26,18 +27,18 @@ namespace UniGLTF
             {
                 return false;
             }
-            if (m.shader.name != UniGLTF.UniUnlit.Utils.ShaderName)
+            if (m.shader.name != UniGLTF.UniUnlit.UniUnlitUtil.ShaderName)
             {
                 return false;
             }
-            if (UniGLTF.UniUnlit.Utils.GetVColBlendMode(m) != UniGLTF.UniUnlit.UniUnlitVertexColorBlendOp.Multiply)
+            if (UniGLTF.UniUnlit.UniUnlitUtil.GetVColBlendMode(m) != UniGLTF.UniUnlit.UniUnlitVertexColorBlendOp.Multiply)
             {
                 return false;
             }
             return true;
         }
 
-        public static VertexColorState DetectVertexColor(Mesh mesh, Material[] materials)
+        public static VertexColorState DetectVertexColor(Mesh mesh, IEnumerable<Material> materials)
         {
             if (mesh != null && mesh.colors != null && mesh.colors.Length == mesh.vertexCount)
             {

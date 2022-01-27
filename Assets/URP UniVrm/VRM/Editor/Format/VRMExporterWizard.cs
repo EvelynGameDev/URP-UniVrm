@@ -11,10 +11,7 @@ namespace VRM
 {
     public class VRMExporterWizard : ExportDialogBase
     {
-        const string CONVERT_HUMANOID_KEY = VRMVersion.MENU + "/Export " + VRMVersion.VRM_VERSION;
-
-        [MenuItem(CONVERT_HUMANOID_KEY, false, 1)]
-        private static void ExportFromMenu()
+        public static void OpenExportMenu()
         {
             var window = (VRMExporterWizard)GetWindow(typeof(VRMExporterWizard));
             window.titleContent = new GUIContent("VRM Exporter");
@@ -177,7 +174,8 @@ namespace VRM
             // Humanoid のチェック
             HumanoidValidator.MeshInformations = m_meshes.Meshes;
             HumanoidValidator.EnableFreeze = m_settings.PoseFreeze;
-            yield return HumanoidValidator.Validate;
+            yield return HumanoidValidator.Validate_Normalize;
+            yield return HumanoidValidator.Validate_TPose;
 
             //
             // VRM のチェック
@@ -239,7 +237,7 @@ namespace VRM
                     //
                     // T-Pose
                     //
-                    if (GUILayout.Button(VRMExportSettingsEditor.Options.DO_TPOSE.Msg()))
+                    if (GUILayout.Button(VRMExportOptions.DO_TPOSE.Msg()))
                     {
                         if (State.ExportRoot != null)
                         {
@@ -250,7 +248,7 @@ namespace VRM
                         }
                     }
 
-                    if (GUILayout.Button(VRMExportSettingsEditor.Options.DO_TPOSE.Msg() + "(unity internal)"))
+                    if (GUILayout.Button(VRMExportOptions.DO_TPOSE.Msg() + "(unity internal)"))
                     {
                         if (State.ExportRoot != null)
                         {

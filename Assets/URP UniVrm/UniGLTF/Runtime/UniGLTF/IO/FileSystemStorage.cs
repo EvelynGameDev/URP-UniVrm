@@ -3,30 +3,9 @@ using System.IO;
 
 namespace UniGLTF
 {
-    public class SimpleStorage : IStorage
-    {
-        ArraySegment<Byte> m_bytes;
-
-        public SimpleStorage() : this(new ArraySegment<byte>())
-        {
-        }
-
-        public SimpleStorage(ArraySegment<Byte> bytes)
-        {
-            m_bytes = bytes;
-        }
-
-        public ArraySegment<byte> Get(string url)
-        {
-            return m_bytes;
-        }
-
-        public string GetPath(string url)
-        {
-            return null;
-        }
-    }
-
+    /// <summary>
+    /// Implement url that represnet relative path
+    /// </summary>
     public class FileSystemStorage : IStorage
     {
         string m_root;
@@ -38,24 +17,8 @@ namespace UniGLTF
 
         public ArraySegment<byte> Get(string url)
         {
-            var bytes =
-                (url.FastStartsWith("data:"))
-                ? UriByteBuffer.ReadEmbedded(url)
-                : File.ReadAllBytes(Path.Combine(m_root, url))
-                ;
+            var bytes = File.ReadAllBytes(Path.Combine(m_root, url));
             return new ArraySegment<byte>(bytes);
-        }
-
-        public string GetPath(string url)
-        {
-            if (url.FastStartsWith("data:"))
-            {
-                return null;
-            }
-            else
-            {
-                return Path.Combine(m_root, url).Replace("\\", "/");
-            }
         }
     }
 }
