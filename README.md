@@ -13,7 +13,7 @@ The UniVrm version of this package is v0.94.0.
 
 Drag and drop the unipackage file into your Unity project to use it.
 
-[URPUniVrm_ver_1_0_3.unitypackage](https://github.com/akihisaArchieSakai/URP-UniVrm/releases/tag/ver-1.0.3)
+[Unitypackage File](https://github.com/EvelynGameDev/URP-UniVrm/releases)
 
 Just import this package into your Universal Render Pipeline project, drag and drop the Vrm file, and toon shaders will appear just fine.
 

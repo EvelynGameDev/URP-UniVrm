@@ -13,7 +13,7 @@ UniVrmのバージョンはv0.94.0です。
 
 unipackageファイルをあなたのUnityプロジェクトにドラッグ&ドロップして使ってください。
 
-[URPUniVrm_ver_1_0_3.unitypackage](https://github.com/akihisaArchieSakai/URP-UniVrm/releases/tag/ver-1.0.3)
+[Unitypackageファイル](https://github.com/EvelynGameDev/URP-UniVrm/releases)
 
 あなたのUniversal Render Pipelineプロジェクトにインポートするだけで、Vrmをプロジェクトにドラッグ&ドロップするとURP用のシェーダーが上手く割り当てられるようになっています。
 
